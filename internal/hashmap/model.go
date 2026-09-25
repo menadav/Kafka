@@ -8,6 +8,13 @@ type ClientMeta struct {
     IPCPath  string
 }
 
-type ClientIndex struct {
+type node struct {
+    key string
+    meta ClientMeta
+    next *node
+}
 
+type ClientIndex struct {
+    buckets []*node
+    size    int
 }
