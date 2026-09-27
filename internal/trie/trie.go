@@ -39,3 +39,21 @@ func (t *Trie) Match(key string) []string {
     }
     return result
 }
+
+func (t *Trie) Unsubscribe(prefix string, clientID string) {
+    actual := t.root
+
+    for _, letter := range []byte(prefix) {
+        if actual.children[letter] == nil {
+            return
+        }
+        actual = actual.children[letter]
+    }
+
+    for i := 0; i < len(actual.subs); i++ {
+        if actual.subs[i] == clientID {
+            actual.subs = append(actual.subs[:i], actual.subs[i+1:]...)
+            return
+        }
+    }
+}
