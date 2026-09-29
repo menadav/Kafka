@@ -1,20 +1,20 @@
 package hashmap
 
 type ClientMeta struct {
-    ClientID string
-    Topic    string
-    Offset   uint32
-    Prefix   string
-    IPCPath  string
+	ClientID string
+	Topic    string
+	Offset   uint32
+	Prefix   string
+	IPCPath  string
 }
 
-type node struct {
-    key string
-    meta ClientMeta
-    next *node
+type node[T any] struct {
+	key  string
+	meta T
+	next *node[T]
 }
 
-type ClientIndex struct {
-    buckets []*node
-    size    int
+type Index[T any] struct {
+	buckets []*node[T]
+	size    int
 }
