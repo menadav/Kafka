@@ -5,25 +5,17 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"syscall"
 	"kafka/internal/ipc"
 )
 
 func main() {
 	path := ipc.BuildIPCPath(os.Getpid())
-
-	err := syscall.Mkfifo(path, 0666)
+	err := ipc.CreateFIFO(path)
 	if err != nil {
-		if os.IsExist(err) {
-			os.Remove(path)
-			err = syscall.Mkfifo(path, 0666)
-		}
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
-	endpoint, err := os.OpenFile(path, os.O_RDWR, 0)
+	endpoint, err := ipc.OpenEndpoint(path)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -37,7 +29,7 @@ func main() {
 		}
 		if strings.HasPrefix(line, "PING ") {
 			replyPath := strings.TrimSpace(strings.TrimPrefix(line, "PING "))
-			reply, err := os.OpenFile(replyPath, os.O_WRONLY, 0)
+			reply, err := ipc.OpenWrite(replyPath)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				continue

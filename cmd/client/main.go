@@ -4,7 +4,6 @@ import(
     "os"
     "fmt"
     "io"
-    "syscall"
     "kafka/internal/ipc"
 )
 
@@ -16,18 +15,12 @@ func main(){
     }
     serverPath := os.Args[1]
     replyPath := ipc.ChildPath(serverPath, fmt.Sprintf("ping.%d", os.Getpid()))
-    err := syscall.Mkfifo(replyPath, 0666)
+	err := ipc.CreateFIFO(replyPath)
     if err != nil {
-        if os.IsExist(err) {
-            os.Remove(replyPath)
-            err = syscall.Mkfifo(replyPath, 0666)
-        }
-        if err != nil {
-            fmt.Fprintln(os.Stderr, err)
-            os.Exit(1)
-        }
+        fmt.Fprintln(os.Stderr, err)
+        os.Exit(1)
     }
-    endpoint, err := os.OpenFile(serverPath, os.O_WRONLY, 0)
+	endpoint, err := ipc.OpenWrite(serverPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -35,7 +28,7 @@ func main(){
     message := fmt.Sprintf("PING %s\n", replyPath)
     endpoint.WriteString(message)
     endpoint.Close()
-    reply, err := os.OpenFile(replyPath, os.O_RDONLY, 0)
+    reply, err := ipc.OpenRead(replyPath)
     if err != nil {
         fmt.Fprintln(os.Stderr, err)
         os.Exit(1)
