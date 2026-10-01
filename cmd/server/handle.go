@@ -6,7 +6,6 @@ import (
 	"kafka/internal/protocol"
 )
 
-
 func handle(b *broker.Broker, req protocol.Request) protocol.Response {
 	var resp protocol.Response
 

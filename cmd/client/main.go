@@ -5,16 +5,17 @@ import(
     "fmt"
     "io"
     "kafka/internal/ipc"
+    "kafka/internal/protocol"
 )
 
 func main(){
 
-    if len(os.Args) != 2{
+    if len(os.Args) > 3 {
         fmt.Fprintln(os.Stderr, "invalid arguments")
         os.Exit(1)
     }
     serverPath := os.Args[1]
-    replyPath := ipc.ChildPath(serverPath, fmt.Sprintf("ping.%d", os.Getpid()))
+    replyPath := ipc.ChildPath(serverPath, os.Getpid())
 	err := ipc.CreateFIFO(replyPath)
     if err != nil {
         fmt.Fprintln(os.Stderr, err)
