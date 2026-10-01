@@ -4,8 +4,9 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"strings"
+	"kafka/internal/broker"
 	"kafka/internal/ipc"
+	"kafka/internal/protocol"
 )
 
 func main() {
@@ -22,20 +23,24 @@ func main() {
 	}
 	fmt.Println(path)
 	reader := bufio.NewReader(endpoint)
+	b := broker.New()
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
 			continue
 		}
-		if strings.HasPrefix(line, "PING ") {
-			replyPath := strings.TrimSpace(strings.TrimPrefix(line, "PING "))
-			reply, err := ipc.OpenWrite(replyPath)
-			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
-				continue
-			}
-			reply.WriteString("PONG\n")
-			reply.Close()
+		req, err := protocol.DecodeRequest(line)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			continue
 		}
+		resp := handle(b, req)
+		reply, err := ipc.OpenWrite(req.ReplyPath)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			continue
+		}
+		reply.WriteString(resp.Encode())
+		reply.Close()
 	}
 }
