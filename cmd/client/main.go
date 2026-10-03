@@ -1,45 +1,65 @@
 package main
 
-import(
-    "os"
-    "fmt"
-    "io"
-    "kafka/internal/ipc"
-    "kafka/internal/protocol"
+import (
+	"fmt"
+	"io"
+	"os"
+	"strconv"
+	"kafka/internal/ipc"
+	"kafka/internal/protocol"
 )
 
-func main(){
+func main() {
+	if len(os.Args) < 3 {
+		fmt.Fprintln(os.Stderr, "usage: client <ipc_identifier> <command> [args]")
+		os.Exit(1)
+	}
+	serverPath := os.Args[1]
+	replyPath := ipc.ChildPath(serverPath, strconv.Itoa(os.Getpid()))
 
-    if len(os.Args) > 3 {
-        fmt.Fprintln(os.Stderr, "invalid arguments")
-        os.Exit(1)
-    }
-    serverPath := os.Args[1]
-    replyPath := ipc.ChildPath(serverPath, os.Getpid())
-	err := ipc.CreateFIFO(replyPath)
-    if err != nil {
-        fmt.Fprintln(os.Stderr, err)
-        os.Exit(1)
-    }
-	endpoint, err := ipc.OpenWrite(serverPath)
+	req, err := buildRequest(os.Args, replyPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-    message := fmt.Sprintf("PING %s\n", replyPath)
-    endpoint.WriteString(message)
-    endpoint.Close()
-    reply, err := ipc.OpenRead(replyPath)
-    if err != nil {
-        fmt.Fprintln(os.Stderr, err)
-        os.Exit(1)
-    }
-    data, err := io.ReadAll(reply)
-    if err != nil {
-        fmt.Fprintln(os.Stderr, err)
-        os.Exit(1)
-    }
-    fmt.Print(string(data))
-    reply.Close()
-    os.Remove(replyPath)
+	message, err := req.Encode()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if err := ipc.CreateFIFO(replyPath); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(3)
+	}
+	endpoint, err := ipc.OpenWrite(serverPath)
+	if err != nil {
+		os.Remove(replyPath)
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	endpoint.WriteString(message)
+	endpoint.Close()
+	reply, err := ipc.OpenRead(replyPath)
+	if err != nil {
+		os.Remove(replyPath)
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(3)
+	}
+	data, err := io.ReadAll(reply)
+	reply.Close()
+	os.Remove(replyPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(3)
+	}
+	resp, err := protocol.DecodeResponse(string(data))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(3)
+	}
+	if resp.Code != 0 {
+		fmt.Fprintln(os.Stderr, resp.Body)
+		os.Exit(resp.Code)
+	}
+	fmt.Println(resp.Body)
 }
