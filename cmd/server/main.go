@@ -2,14 +2,21 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
+
 	"kafka/internal/broker"
 	"kafka/internal/ipc"
 	"kafka/internal/protocol"
-	"os"
 )
 
 func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	path := ipc.BuildIPCPath(os.Getpid())
 	err := ipc.CreateFIFO(path)
 	if err != nil {
@@ -24,6 +31,13 @@ func main() {
 	fmt.Println(path)
 	reader := bufio.NewReader(endpoint)
 	b := broker.New()
+	go serve(reader, b)
+	<-ctx.Done()
+	fmt.Fprintln(os.Stderr, "shutting down")
+	os.Remove(path)
+}
+
+func serve(reader *bufio.Reader, b *broker.Broker) {
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
