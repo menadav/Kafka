@@ -7,9 +7,10 @@ import (
 )
 
 const (
-	CmdCreate = "CREATE"
-	CmdList   = "LIST"
-	CmdInfo   = "INFO"
+	CmdCreate  = "CREATE"
+	CmdList    = "LIST"
+	CmdInfo    = "INFO"
+	CmdProduce = "PRODUCE"
 )
 
 func (r Request) Encode() (string, error) {
@@ -20,6 +21,8 @@ func (r Request) Encode() (string, error) {
 		return fmt.Sprintf("%s %s %s\n", r.Command, r.ReplyPath, r.Topic), nil
 	case CmdInfo:
 		return fmt.Sprintf("%s %s %s\n", r.Command, r.ReplyPath, r.ClientID), nil
+	case CmdProduce:
+		return fmt.Sprintf("%s %s %s %s %s\n", r.Command, r.ReplyPath, r.Topic, r.Key, r.Value), nil
 	default:
 		return "", fmt.Errorf("unknown command: %q", r.Command)
 	}
@@ -50,7 +53,13 @@ func DecodeRequest(line string) (Request, error) {
 			return Request{}, fmt.Errorf("%s expects 2 arguments, got %d", command, len(fields)-1)
 		}
 		return Request{Command: command, ReplyPath: fields[1], ClientID: fields[2]}, nil
-
+	case CmdProduce:
+		parts := strings.SplitN(line, " ", 5)
+		if len(parts) != 5 {
+			return Request{}, fmt.Errorf("%s expects 4 arguments, got %d", command, len(parts)-1)
+		}
+		value := strings.TrimSuffix(parts[4], "\n")
+		return Request{Command: command, ReplyPath: parts[1], Topic: parts[2], Key: parts[3], Value: value}, nil
 	default:
 		return Request{}, fmt.Errorf("unknown command: %q", command)
 	}
@@ -72,6 +81,5 @@ func DecodeResponse(line string) (Response, error) {
 	if err != nil {
 		return Response{}, fmt.Errorf("response code is not a number: %q", parts[0])
 	}
-
 	return Response{Code: code, Body: parts[1]}, nil
 }

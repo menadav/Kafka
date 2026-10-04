@@ -1,16 +1,17 @@
 package protocol
 
-
 type Request struct {
-    Command   string
-    ReplyPath string
-    Topic     string
-    ClientID  string
-    Prefix    string
-    Offset    uint32
+	Command   string
+	ReplyPath string
+	Topic     string
+	ClientID  string
+	Prefix    string
+	Offset    uint32
+	Key       string
+	Value     string
 }
 
-type Response struct{
-    Code int
-    Body string
-} 
+type Response struct {
+	Code int
+	Body string
+}
