@@ -13,19 +13,26 @@ const (
 	CmdProduce = "PRODUCE"
 )
 
+const MaxLine = 4096
+
 func (r Request) Encode() (string, error) {
+	var line string
 	switch r.Command {
 	case CmdList:
-		return fmt.Sprintf("%s %s\n", r.Command, r.ReplyPath), nil
+		line = fmt.Sprintf("%s %s\n", r.Command, r.ReplyPath)
 	case CmdCreate:
-		return fmt.Sprintf("%s %s %s\n", r.Command, r.ReplyPath, r.Topic), nil
+		line = fmt.Sprintf("%s %s %s\n", r.Command, r.ReplyPath, r.Topic)
 	case CmdInfo:
-		return fmt.Sprintf("%s %s %s\n", r.Command, r.ReplyPath, r.ClientID), nil
+		line = fmt.Sprintf("%s %s %s\n", r.Command, r.ReplyPath, r.ClientID)
 	case CmdProduce:
-		return fmt.Sprintf("%s %s %s %s %s\n", r.Command, r.ReplyPath, r.Topic, r.Key, r.Value), nil
+		line = fmt.Sprintf("%s %s %s %s %s\n", r.Command, r.ReplyPath, r.Topic, r.Key, r.Value)
 	default:
 		return "", fmt.Errorf("unknown command: %q", r.Command)
 	}
+	if len(line) > MaxLine {
+		return "", fmt.Errorf("request too large: %d bytes, max %d", len(line), MaxLine)
+	}
+	return line, nil
 }
 
 func DecodeRequest(line string) (Request, error) {
@@ -41,13 +48,11 @@ func DecodeRequest(line string) (Request, error) {
 			return Request{}, fmt.Errorf("%s expects 1 argument, got %d", command, len(fields)-1)
 		}
 		return Request{Command: command, ReplyPath: fields[1]}, nil
-
 	case CmdCreate:
 		if len(fields) != 3 {
 			return Request{}, fmt.Errorf("%s expects 2 arguments, got %d", command, len(fields)-1)
 		}
 		return Request{Command: command, ReplyPath: fields[1], Topic: fields[2]}, nil
-
 	case CmdInfo:
 		if len(fields) != 3 {
 			return Request{}, fmt.Errorf("%s expects 2 arguments, got %d", command, len(fields)-1)
@@ -76,7 +81,6 @@ func DecodeResponse(line string) (Response, error) {
 	if len(parts) != 2 {
 		return Response{}, fmt.Errorf("malformed response: %q", line)
 	}
-
 	code, err := strconv.Atoi(parts[0])
 	if err != nil {
 		return Response{}, fmt.Errorf("response code is not a number: %q", parts[0])
