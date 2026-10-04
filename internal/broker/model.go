@@ -1,22 +1,22 @@
 package broker
 
 import (
-    "kafka/internal/trie"
-    "kafka/internal/hashmap"
+	"kafka/internal/hashmap"
+	"kafka/internal/trie"
 )
 
 type Message struct {
-    Key     string
-    Value   []byte
-    Offset  uint32
+	Key    string
+	Value  []byte
+	Offset uint32
 }
 
 type Topic struct {
-    name        string
-    messages    []Message
-    subscribers *trie.Trie
+	name        string
+	messages    []Message
+	subscribers *trie.Trie
 }
 
 type Broker struct {
-    topics  *hashmap.Index[*Topic]
+	topics *hashmap.Index[*Topic]
 }

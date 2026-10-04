@@ -3,10 +3,10 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"os"
 	"kafka/internal/broker"
 	"kafka/internal/ipc"
 	"kafka/internal/protocol"
+	"os"
 )
 
 func main() {
