@@ -1,6 +1,8 @@
 package broker
 
 import (
+	"sync"
+
 	"kafka/internal/hashmap"
 	"kafka/internal/trie"
 )
@@ -12,11 +14,14 @@ type Message struct {
 }
 
 type Topic struct {
-	name        string
+	name string
+
+	mu          sync.Mutex
 	messages    []Message
 	subscribers *trie.Trie
 }
 
 type Broker struct {
+	mu     sync.RWMutex
 	topics *hashmap.Index[*Topic]
 }

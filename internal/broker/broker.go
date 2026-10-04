@@ -1,9 +1,10 @@
 package broker
 
 import (
+	"slices"
+
 	"kafka/internal/hashmap"
 	"kafka/internal/trie"
-	"slices"
 )
 
 func New() *Broker {
@@ -13,12 +14,20 @@ func New() *Broker {
 }
 
 func (b *Broker) Exists(name string) bool {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.exists(name)
+}
+
+func (b *Broker) exists(name string) bool {
 	_, answer := b.topics.Get(name)
 	return answer
 }
 
 func (b *Broker) Create(name string) bool {
-	if b.Exists(name) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.exists(name) {
 		return false
 	}
 	elTopic := &Topic{
@@ -30,12 +39,16 @@ func (b *Broker) Create(name string) bool {
 }
 
 func (b *Broker) List() []string {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
 	keys := b.topics.Keys()
 	slices.Sort(keys)
 	return keys
 }
 
 func (b *Broker) Produce(name string, key string, value []byte) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	t, ok := b.topics.Get(name)
 	if !ok {
 		return false
