@@ -47,12 +47,14 @@ func (b *Broker) List() []string {
 }
 
 func (b *Broker) Produce(name string, key string, value []byte) bool {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+	b.mu.RLock()
 	t, ok := b.topics.Get(name)
+	b.mu.RUnlock()
 	if !ok {
 		return false
 	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	offset := uint32(len(t.messages))
 	t.messages = append(t.messages, Message{
 		Key:    key,

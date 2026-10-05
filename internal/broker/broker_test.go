@@ -52,6 +52,15 @@ func TestBroker(t *testing.T) {
 		}
 	})
 
+	t.Run("produce to a missing topic does not leave the broker locked", func(t *testing.T) {
+		b := New()
+		b.Produce("ghost", "k", []byte("v"))
+		// If Produce leaked the read lock, Create would block here forever.
+		if !b.Create("user_events") {
+			t.Errorf("Create after a failed Produce = false, want true")
+		}
+	})
+
 	t.Run("produce assigns consecutive offsets", func(t *testing.T) {
 		b := New()
 		b.Create("user_events")
@@ -93,6 +102,34 @@ func TestBrokerConcurrency(t *testing.T) {
 				t.Fatalf("offset %d assigned twice", m.Offset)
 			}
 			seen[m.Offset] = true
+		}
+	})
+
+	t.Run("concurrent produce on several topics", func(t *testing.T) {
+		const perTopic = 20
+		names := []string{"orders", "user_events", "logs"}
+		b := New()
+		for _, n := range names {
+			b.Create(n)
+		}
+
+		var wg sync.WaitGroup
+		for _, n := range names {
+			for i := 0; i < perTopic; i++ {
+				wg.Add(1)
+				go func(n string, i int) {
+					defer wg.Done()
+					b.Produce(n, fmt.Sprintf("k%d", i), []byte("v"))
+				}(n, i)
+			}
+		}
+		wg.Wait()
+
+		for _, n := range names {
+			tp, _ := b.topics.Get(n)
+			if got := len(tp.messages); got != perTopic {
+				t.Errorf("topic %q stored %d messages, want %d", n, got, perTopic)
+			}
 		}
 	})
 
