@@ -12,7 +12,10 @@ const (
 	CmdInfo      = "INFO"
 	CmdProduce   = "PRODUCE"
 	CmdSubscribe = "SUBSCRIBE"
+	CmdExists    = "EXISTS"
 )
+
+const MaxPayload = 1024
 
 const MaxLine = 4096
 
@@ -25,8 +28,10 @@ func (r Request) Encode() (string, error) {
 		line = fmt.Sprintf("%s %s %s\n", r.Command, r.ReplyPath, r.Topic)
 	case CmdInfo:
 		line = fmt.Sprintf("%s %s %s\n", r.Command, r.ReplyPath, r.ClientID)
+	case CmdExists:
+		line = fmt.Sprintf("%s %s %s\n", r.Command, r.ReplyPath, r.Topic)
 	case CmdProduce:
-		line = fmt.Sprintf("%s %s %s %s %s\n", r.Command, r.ReplyPath, r.Topic, r.Key, r.Value)
+		line = fmt.Sprintf("%s %s %s %s:%s\n", r.Command, r.ReplyPath, r.Topic, r.Key, r.Value)
 	case CmdSubscribe:
 		line = fmt.Sprintf("%s %s %s %s\n", r.Command, r.ReplyPath, r.Topic, r.Prefix)
 	default:
@@ -61,13 +66,21 @@ func DecodeRequest(line string) (Request, error) {
 			return Request{}, fmt.Errorf("%s expects 2 arguments, got %d", command, len(fields)-1)
 		}
 		return Request{Command: command, ReplyPath: fields[1], ClientID: fields[2]}, nil
-	case CmdProduce:
-		parts := strings.SplitN(line, " ", 5)
-		if len(parts) != 5 {
-			return Request{}, fmt.Errorf("%s expects 4 arguments, got %d", command, len(parts)-1)
+	case CmdExists:
+		if len(fields) != 3 {
+			return Request{}, fmt.Errorf("%s expects 2 arguments, got %d", command, len(fields)-1)
 		}
-		value := strings.TrimSuffix(parts[4], "\n")
-		return Request{Command: command, ReplyPath: parts[1], Topic: parts[2], Key: parts[3], Value: value}, nil
+		return Request{Command: command, ReplyPath: fields[1], Topic: fields[2]}, nil
+	case CmdProduce:
+		parts := strings.SplitN(strings.TrimSuffix(line, "\n"), " ", 4)
+		if len(parts) != 4 {
+			return Request{}, fmt.Errorf("%s expects 3 arguments, got %d", command, len(parts)-1)
+		}
+		key, value, ok := strings.Cut(parts[3], ":")
+		if !ok {
+			return Request{}, fmt.Errorf("%s message must be key:body", command)
+		}
+		return Request{Command: command, ReplyPath: parts[1], Topic: parts[2], Key: key, Value: value}, nil
 	case CmdSubscribe:
 		if len(fields) < 3 || len(fields) > 4 {
 			return Request{}, fmt.Errorf("%s expects 2 or 3 arguments, got %d", command, len(fields)-1)
