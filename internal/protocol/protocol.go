@@ -17,6 +17,8 @@ const (
 
 const MaxPayload = 1024
 
+const noOffset = "-"
+
 const MaxLine = 4096
 
 func (r Request) Encode() (string, error) {
@@ -33,7 +35,14 @@ func (r Request) Encode() (string, error) {
 	case CmdProduce:
 		line = fmt.Sprintf("%s %s %s %s:%s\n", r.Command, r.ReplyPath, r.Topic, r.Key, r.Value)
 	case CmdSubscribe:
-		line = fmt.Sprintf("%s %s %s %s\n", r.Command, r.ReplyPath, r.Topic, r.Prefix)
+		// SUBSCRIBE <reply> <topic> <client> <offset> <prefix>
+		// The offset is "-" when the client gave none: text has no "false",
+		// and "-" can never be a real offset.
+		offset := noOffset
+		if r.HasOffset {
+			offset = strconv.FormatUint(uint64(r.Offset), 10)
+		}
+		line = fmt.Sprintf("%s %s %s %s %s %s\n", r.Command, r.ReplyPath, r.Topic, r.ClientID, offset, r.Prefix)
 	default:
 		return "", fmt.Errorf("unknown command: %q", r.Command)
 	}
@@ -82,14 +91,26 @@ func DecodeRequest(line string) (Request, error) {
 		}
 		return Request{Command: command, ReplyPath: parts[1], Topic: parts[2], Key: key, Value: value}, nil
 	case CmdSubscribe:
-		if len(fields) < 3 || len(fields) > 4 {
-			return Request{}, fmt.Errorf("%s expects 2 or 3 arguments, got %d", command, len(fields)-1)
+		parts := strings.SplitN(strings.TrimSuffix(line, "\n"), " ", 6)
+		if len(parts) != 6 {
+			return Request{}, fmt.Errorf("%s expects 5 arguments, got %d", command, len(parts)-1)
 		}
-		prefix := ""
-		if len(fields) == 4 {
-			prefix = fields[3]
+		req := Request{
+			Command:   command,
+			ReplyPath: parts[1],
+			Topic:     parts[2],
+			ClientID:  parts[3],
+			Prefix:    parts[5],
 		}
-		return Request{Command: command, ReplyPath: fields[1], Topic: fields[2], Prefix: prefix}, nil
+		if parts[4] != noOffset {
+			n, err := strconv.ParseUint(parts[4], 10, 32)
+			if err != nil {
+				return Request{}, fmt.Errorf("%s offset is not a number: %q", command, parts[4])
+			}
+			req.Offset = uint32(n)
+			req.HasOffset = true
+		}
+		return req, nil
 	default:
 		return Request{}, fmt.Errorf("unknown command: %q", command)
 	}
