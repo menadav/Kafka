@@ -1,10 +1,16 @@
 package broker
 
 import (
+	"errors"
 	"slices"
 
 	"kafka/internal/hashmap"
 	"kafka/internal/trie"
+)
+
+var (
+	ErrTopicNotFound = errors.New("topic not found")
+	ErrClientBusy    = errors.New("client already connected")
 )
 
 func New() *Broker {
@@ -63,4 +69,55 @@ func (b *Broker) Produce(name string, key string, value []byte) bool {
 		Offset: offset,
 	})
 	return true
+}
+
+func (b *Broker) Subscribe(topic, clientID, prefix, ipcPath string, offset uint32, hasOffset bool) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	t, ok := b.topics.Get(topic)
+	if !ok {
+		return ErrTopicNotFound
+	}
+	c, known := b.clients.Get(clientID)
+	if known && c.Connected {
+		return ErrClientBusy
+	}
+	if !known {
+		c = &ClientMeta{ClientID: clientID}
+	} else if old, ok := b.topics.Get(c.Topic); ok {
+		old.mu.Lock()
+		old.removeSubscriber(clientID, c.Prefix)
+		old.mu.Unlock()
+	}
+	if hasOffset {
+		c.Offset = offset
+	}
+	c.Topic = topic
+	c.Prefix = prefix
+	c.IPCPath = ipcPath
+	c.Connected = true
+	t.mu.Lock()
+	t.addSubscriber(clientID, prefix)
+	t.mu.Unlock()
+	b.clients.Put(clientID, c)
+	return nil
+}
+
+func (t *Topic) addSubscriber(clientID, prefix string) {
+	if prefix == "" {
+		t.all = append(t.all, clientID)
+		return
+	}
+	t.subscribers.Subscribe(prefix, clientID)
+}
+
+func (t *Topic) removeSubscriber(clientID, prefix string) {
+	if prefix == "" {
+		if i := slices.Index(t.all, clientID); i >= 0 {
+			t.all = slices.Delete(t.all, i, i+1)
+		}
+		return
+	}
+	t.subscribers.Unsubscribe(prefix, clientID)
 }

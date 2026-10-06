@@ -8,12 +8,13 @@ import (
 )
 
 type ClientMeta struct {
-	ClientID string
-	Topic    string
-	Offset   uint32
-	Prefix   string
-	IPCPath  string
-	inbox    chan Message
+	ClientID  string
+	Topic     string
+	Offset    uint32
+	Prefix    string
+	IPCPath   string
+	inbox     chan Message
+	Connected bool
 }
 
 type Message struct {
@@ -28,6 +29,7 @@ type Topic struct {
 	mu          sync.Mutex
 	messages    []Message
 	subscribers *trie.Trie
+	all         []string
 }
 
 type Broker struct {
