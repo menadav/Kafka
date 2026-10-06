@@ -5,6 +5,14 @@ import (
 	"testing"
 )
 
+type ClientMeta struct {
+	ClientID string
+	Topic    string
+	Offset   uint32
+	Prefix   string
+	IPCPath  string
+}
+
 const collideA = "client1"
 const collideB = "moulinette"
 

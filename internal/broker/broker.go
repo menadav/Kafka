@@ -9,7 +9,8 @@ import (
 
 func New() *Broker {
 	return &Broker{
-		topics: hashmap.New[*Topic](),
+		topics:  hashmap.New[*Topic](),
+		clients: hashmap.New[*ClientMeta](),
 	}
 }
 

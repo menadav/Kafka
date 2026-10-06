@@ -7,6 +7,15 @@ import (
 	"kafka/internal/trie"
 )
 
+type ClientMeta struct {
+	ClientID string
+	Topic    string
+	Offset   uint32
+	Prefix   string
+	IPCPath  string
+	inbox    chan Message
+}
+
 type Message struct {
 	Key    string
 	Value  []byte
@@ -22,6 +31,7 @@ type Topic struct {
 }
 
 type Broker struct {
-	mu     sync.RWMutex
-	topics *hashmap.Index[*Topic]
+	mu      sync.RWMutex
+	topics  *hashmap.Index[*Topic]
+	clients *hashmap.Index[*ClientMeta]
 }
