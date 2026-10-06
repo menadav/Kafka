@@ -7,10 +7,11 @@ import (
 )
 
 const (
-	CmdCreate  = "CREATE"
-	CmdList    = "LIST"
-	CmdInfo    = "INFO"
-	CmdProduce = "PRODUCE"
+	CmdCreate    = "CREATE"
+	CmdList      = "LIST"
+	CmdInfo      = "INFO"
+	CmdProduce   = "PRODUCE"
+	CmdSubscribe = "SUBSCRIBE"
 )
 
 const MaxLine = 4096
@@ -26,6 +27,8 @@ func (r Request) Encode() (string, error) {
 		line = fmt.Sprintf("%s %s %s\n", r.Command, r.ReplyPath, r.ClientID)
 	case CmdProduce:
 		line = fmt.Sprintf("%s %s %s %s %s\n", r.Command, r.ReplyPath, r.Topic, r.Key, r.Value)
+	case CmdSubscribe:
+		line = fmt.Sprintf("%s %s %s %s\n", r.Command, r.ReplyPath, r.Topic, r.Prefix)
 	default:
 		return "", fmt.Errorf("unknown command: %q", r.Command)
 	}
@@ -65,6 +68,15 @@ func DecodeRequest(line string) (Request, error) {
 		}
 		value := strings.TrimSuffix(parts[4], "\n")
 		return Request{Command: command, ReplyPath: parts[1], Topic: parts[2], Key: parts[3], Value: value}, nil
+	case CmdSubscribe:
+		if len(fields) < 3 || len(fields) > 4 {
+			return Request{}, fmt.Errorf("%s expects 2 or 3 arguments, got %d", command, len(fields)-1)
+		}
+		prefix := ""
+		if len(fields) == 4 {
+			prefix = fields[3]
+		}
+		return Request{Command: command, ReplyPath: fields[1], Topic: fields[2], Prefix: prefix}, nil
 	default:
 		return Request{}, fmt.Errorf("unknown command: %q", command)
 	}
