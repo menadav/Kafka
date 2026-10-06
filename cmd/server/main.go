@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"kafka/internal/broker"
@@ -31,13 +32,13 @@ func main() {
 	fmt.Println(path)
 	reader := bufio.NewReader(endpoint)
 	b := broker.New()
-	go serve(reader, b)
+	go serve(path, reader, b)
 	<-ctx.Done()
 	fmt.Fprintln(os.Stderr, "shutting down")
 	os.Remove(path)
 }
 
-func serve(reader *bufio.Reader, b *broker.Broker) {
+func serve(path string, reader *bufio.Reader, b *broker.Broker) {
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
@@ -46,6 +47,10 @@ func serve(reader *bufio.Reader, b *broker.Broker) {
 		req, err := protocol.DecodeRequest(line)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
+			continue
+		}
+		if !ownReplyPath(path, req.ReplyPath) {
+			fmt.Fprintf(os.Stderr, "refusing reply path %q\n", req.ReplyPath)
 			continue
 		}
 		resp := handle(b, req)
@@ -57,4 +62,9 @@ func serve(reader *bufio.Reader, b *broker.Broker) {
 		reply.WriteString(resp.Encode())
 		reply.Close()
 	}
+}
+
+func ownReplyPath(path, reply string) bool {
+	suffix, ok := strings.CutPrefix(reply, path+".")
+	return ok && suffix != "" && !strings.Contains(suffix, "/")
 }
