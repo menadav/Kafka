@@ -5,12 +5,12 @@ import (
 	"slices"
 
 	"kafka/internal/hashmap"
-	"kafka/internal/trie"
 )
 
 var (
-	ErrTopicNotFound = errors.New("topic not found")
-	ErrClientBusy    = errors.New("client already connected")
+	ErrTopicNotFound  = errors.New("topic not found")
+	ErrClientBusy     = errors.New("client already connected")
+	ErrClientNotFound = errors.New("client not found")
 )
 
 func New() *Broker {
@@ -37,11 +37,7 @@ func (b *Broker) Create(name string) bool {
 	if b.exists(name) {
 		return false
 	}
-	elTopic := &Topic{
-		name:        name,
-		subscribers: trie.New(),
-	}
-	b.topics.Put(name, elTopic)
+	b.topics.Put(name, newTopic(name, b.Disconnect))
 	return true
 }
 
@@ -61,13 +57,14 @@ func (b *Broker) Produce(name string, key string, value []byte) bool {
 		return false
 	}
 	t.mu.Lock()
-	defer t.mu.Unlock()
 	offset := uint32(len(t.messages))
 	t.messages = append(t.messages, Message{
 		Key:    key,
 		Value:  value,
 		Offset: offset,
 	})
+	t.mu.Unlock()
+	t.notify()
 	return true
 }
 
@@ -120,4 +117,43 @@ func (t *Topic) removeSubscriber(clientID, prefix string) {
 		return
 	}
 	t.subscribers.Unsubscribe(prefix, clientID)
+}
+
+func (b *Broker) Attach(clientID string, ch Channel) error {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	c, ok := b.clients.Get(clientID)
+	if !ok || !c.Connected {
+		return ErrClientNotFound
+	}
+	t, ok := b.topics.Get(c.Topic)
+	if !ok {
+		return ErrTopicNotFound
+	}
+
+	t.control <- control{attach: &subscriber{
+		id:     clientID,
+		prefix: c.Prefix,
+		next:   c.Offset,
+		ch:     ch,
+	}}
+	return nil
+}
+
+func (b *Broker) Disconnect(clientID string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	c, ok := b.clients.Get(clientID)
+	if !ok || !c.Connected {
+		return
+	}
+	c.Connected = false
+	t, ok := b.topics.Get(c.Topic)
+	if !ok {
+		return
+	}
+	t.mu.Lock()
+	t.removeSubscriber(clientID, c.Prefix)
+	t.mu.Unlock()
+	t.control <- control{detach: clientID}
 }

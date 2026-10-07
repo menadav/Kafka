@@ -13,7 +13,6 @@ type ClientMeta struct {
 	Offset    uint32
 	Prefix    string
 	IPCPath   string
-	inbox     chan Message
 	Connected bool
 }
 
@@ -30,6 +29,9 @@ type Topic struct {
 	messages    []Message
 	subscribers *trie.Trie
 	all         []string
+	control     chan control
+	wake        chan struct{}
+	onGone      func(clientID string)
 }
 
 type Broker struct {
