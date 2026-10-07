@@ -53,7 +53,7 @@ func serve(path string, reader *bufio.Reader, b *broker.Broker) {
 			fmt.Fprintf(os.Stderr, "refusing reply path %q\n", req.ReplyPath)
 			continue
 		}
-		resp := handle(b, req)
+		resp := handle(b, path, req)
 		reply, err := ipc.OpenWrite(req.ReplyPath)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
