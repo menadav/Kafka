@@ -75,6 +75,14 @@ func handle(b *broker.Broker, serverPath string, req protocol.Request) protocol.
 			return protocol.Response{Code: 2, Body: "client not found"}
 		}
 		return protocol.Response{Code: 0, Body: "ready"}
+	case protocol.CmdAck:
+		if !protocol.ValidName(req.ClientID) {
+			return protocol.Response{Code: 1, Body: "invalid client name"}
+		}
+		if err := b.Commit(req.ClientID, req.Offset); err != nil {
+			return protocol.Response{Code: 2, Body: "client not found"}
+		}
+		return protocol.Response{Code: 0, Body: "ok"}
 	default:
 		return protocol.Response{Code: 1, Body: "unknown command"}
 	}

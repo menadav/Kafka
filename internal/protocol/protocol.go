@@ -14,6 +14,7 @@ const (
 	CmdSubscribe = "SUBSCRIBE"
 	CmdExists    = "EXISTS"
 	CmdReady     = "READY"
+	CmdAck       = "ACK"
 )
 
 const MaxPayload = 1024
@@ -35,6 +36,8 @@ func (r Request) Encode() (string, error) {
 		line = fmt.Sprintf("%s %s %s\n", r.Command, r.ReplyPath, r.Topic)
 	case CmdReady:
 		line = fmt.Sprintf("%s %s %s\n", r.Command, r.ReplyPath, r.ClientID)
+	case CmdAck:
+		line = fmt.Sprintf("%s %s %s %d\n", r.Command, r.ReplyPath, r.ClientID, r.Offset)
 	case CmdProduce:
 		line = fmt.Sprintf("%s %s %s %s:%s\n", r.Command, r.ReplyPath, r.Topic, r.Key, r.Value)
 	case CmdSubscribe:
@@ -86,6 +89,15 @@ func DecodeRequest(line string) (Request, error) {
 			return Request{}, fmt.Errorf("%s expects 2 arguments, got %d", command, len(fields)-1)
 		}
 		return Request{Command: command, ReplyPath: fields[1], ClientID: fields[2]}, nil
+	case CmdAck:
+		if len(fields) != 4 {
+			return Request{}, fmt.Errorf("%s expects 3 arguments, got %d", command, len(fields)-1)
+		}
+		n, err := strconv.ParseUint(fields[3], 10, 32)
+		if err != nil {
+			return Request{}, fmt.Errorf("%s offset is not a number: %q", command, fields[3])
+		}
+		return Request{Command: command, ReplyPath: fields[1], ClientID: fields[2], Offset: uint32(n)}, nil
 	case CmdProduce:
 		parts := strings.SplitN(strings.TrimSuffix(line, "\n"), " ", 4)
 		if len(parts) != 4 {

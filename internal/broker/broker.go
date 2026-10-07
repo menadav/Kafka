@@ -157,3 +157,14 @@ func (b *Broker) Disconnect(clientID string) {
 	t.mu.Unlock()
 	t.control <- control{detach: clientID}
 }
+
+func (b *Broker) Commit(clientID string, offset uint32) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	c, ok := b.clients.Get(clientID)
+	if !ok || !c.Connected {
+		return ErrClientNotFound
+	}
+	c.Offset = offset
+	return nil
+}

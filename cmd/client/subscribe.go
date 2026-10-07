@@ -47,11 +47,24 @@ func subscribe(s *session, req protocol.Request, serverPath string) int {
 			fmt.Fprintln(os.Stderr, "server disconnected")
 			return 3
 		}
-		_, key, body, err := protocol.DecodeDelivery(line)
+		offset, key, body, err := protocol.DecodeDelivery(line)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			continue
 		}
 		fmt.Printf("%s:%s\n", key, body)
+		ack, err := s.roundTrip(protocol.Request{
+			Command:  protocol.CmdAck,
+			ClientID: req.ClientID,
+			Offset:   offset + 1,
+		})
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 3
+		}
+		if ack.Code != 0 {
+			fmt.Fprintln(os.Stderr, ack.Body)
+			return ack.Code
+		}
 	}
 }
