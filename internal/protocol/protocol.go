@@ -13,6 +13,7 @@ const (
 	CmdProduce   = "PRODUCE"
 	CmdSubscribe = "SUBSCRIBE"
 	CmdExists    = "EXISTS"
+	CmdReady     = "READY"
 )
 
 const MaxPayload = 1024
@@ -32,12 +33,12 @@ func (r Request) Encode() (string, error) {
 		line = fmt.Sprintf("%s %s %s\n", r.Command, r.ReplyPath, r.ClientID)
 	case CmdExists:
 		line = fmt.Sprintf("%s %s %s\n", r.Command, r.ReplyPath, r.Topic)
+	case CmdReady:
+		line = fmt.Sprintf("%s %s %s\n", r.Command, r.ReplyPath, r.ClientID)
 	case CmdProduce:
 		line = fmt.Sprintf("%s %s %s %s:%s\n", r.Command, r.ReplyPath, r.Topic, r.Key, r.Value)
 	case CmdSubscribe:
-		// SUBSCRIBE <reply> <topic> <client> <offset> <prefix>
-		// The offset is "-" when the client gave none: text has no "false",
-		// and "-" can never be a real offset.
+
 		offset := noOffset
 		if r.HasOffset {
 			offset = strconv.FormatUint(uint64(r.Offset), 10)
@@ -80,6 +81,11 @@ func DecodeRequest(line string) (Request, error) {
 			return Request{}, fmt.Errorf("%s expects 2 arguments, got %d", command, len(fields)-1)
 		}
 		return Request{Command: command, ReplyPath: fields[1], Topic: fields[2]}, nil
+	case CmdReady:
+		if len(fields) != 3 {
+			return Request{}, fmt.Errorf("%s expects 2 arguments, got %d", command, len(fields)-1)
+		}
+		return Request{Command: command, ReplyPath: fields[1], ClientID: fields[2]}, nil
 	case CmdProduce:
 		parts := strings.SplitN(strings.TrimSuffix(line, "\n"), " ", 4)
 		if len(parts) != 4 {
@@ -132,4 +138,24 @@ func DecodeResponse(line string) (Response, error) {
 		return Response{}, fmt.Errorf("response code is not a number: %q", parts[0])
 	}
 	return Response{Code: code, Body: parts[1]}, nil
+}
+
+func EncodeDelivery(offset uint32, key string, value []byte) string {
+	return fmt.Sprintf("%d %s:%s\n", offset, key, value)
+}
+
+func DecodeDelivery(line string) (offset uint32, key, body string, err error) {
+	head, message, ok := strings.Cut(strings.TrimSuffix(line, "\n"), " ")
+	if !ok {
+		return 0, "", "", fmt.Errorf("malformed delivery: %q", line)
+	}
+	n, err := strconv.ParseUint(head, 10, 32)
+	if err != nil {
+		return 0, "", "", fmt.Errorf("delivery offset is not a number: %q", head)
+	}
+	key, body, ok = strings.Cut(message, ":")
+	if !ok {
+		return 0, "", "", fmt.Errorf("delivery must be key:body: %q", message)
+	}
+	return uint32(n), key, body, nil
 }
