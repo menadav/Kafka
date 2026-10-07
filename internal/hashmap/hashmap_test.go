@@ -187,7 +187,7 @@ func TestIndexKeys(t *testing.T) {
 		}
 
 		got := idx.Keys()
-		slices.Sort(got) // Keys makes no promise about order
+		slices.Sort(got)
 		if !slices.Equal(got, want) {
 			t.Errorf("Keys() = %v, want %v", got, want)
 		}
