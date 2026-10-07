@@ -31,9 +31,12 @@ func main() {
 	s.closeOnSignal()
 
 	var code int
-	if req.Command == protocol.CmdProduce {
+	switch req.Command {
+	case protocol.CmdProduce:
 		code = produce(s, req.Topic, os.Stdin)
-	} else {
+	case protocol.CmdSubscribe:
+		code = subscribe(s, req, serverPath)
+	default:
 		code = send(s, req)
 	}
 	s.close()

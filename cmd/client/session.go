@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -19,6 +20,9 @@ type session struct {
 	endpoint  *os.File
 	reply     *os.File
 	replies   *bufio.Reader
+
+	mu          sync.Mutex
+	channelPath string
 }
 
 func openSession(serverPath, replyPath string) (*session, error) {
@@ -68,6 +72,17 @@ func (s *session) close() {
 	s.endpoint.Close()
 	s.reply.Close()
 	os.Remove(s.replyPath)
+	s.mu.Lock()
+	if s.channelPath != "" {
+		os.Remove(s.channelPath)
+	}
+	s.mu.Unlock()
+}
+
+func (s *session) setChannel(path string) {
+	s.mu.Lock()
+	s.channelPath = path
+	s.mu.Unlock()
 }
 
 func (s *session) closeOnSignal() {
