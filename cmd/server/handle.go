@@ -83,6 +83,12 @@ func handle(b *broker.Broker, serverPath string, req protocol.Request) protocol.
 			return protocol.Response{Code: 2, Body: "client not found"}
 		}
 		return protocol.Response{Code: 0, Body: "ok"}
+	case protocol.CmdDisconnect:
+		if !protocol.ValidName(req.ClientID) {
+			return protocol.Response{Code: 1, Body: "invalid client name"}
+		}
+		b.Disconnect(req.ClientID)
+		return protocol.Response{Code: 0, Body: "ok"}
 	default:
 		return protocol.Response{Code: 1, Body: "unknown command"}
 	}

@@ -24,7 +24,7 @@ func subscribe(s *session, req protocol.Request, serverPath string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 3
 	}
-	s.setChannel(path)
+	s.setSubscriber(path, req.ClientID)
 	channel, err := ipc.OpenReadNoWait(path)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -44,6 +44,9 @@ func subscribe(s *session, req protocol.Request, serverPath string) int {
 	for {
 		line, err := lines.ReadString('\n')
 		if err != nil {
+			if s.isLeaving() {
+				return 0
+			}
 			fmt.Fprintln(os.Stderr, "server disconnected")
 			return 3
 		}
@@ -58,6 +61,9 @@ func subscribe(s *session, req protocol.Request, serverPath string) int {
 			ClientID: req.ClientID,
 			Offset:   offset + 1,
 		})
+		if s.isLeaving() {
+			return 0
+		}
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 3

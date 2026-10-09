@@ -7,14 +7,15 @@ import (
 )
 
 const (
-	CmdCreate    = "CREATE"
-	CmdList      = "LIST"
-	CmdInfo      = "INFO"
-	CmdProduce   = "PRODUCE"
-	CmdSubscribe = "SUBSCRIBE"
-	CmdExists    = "EXISTS"
-	CmdReady     = "READY"
-	CmdAck       = "ACK"
+	CmdCreate     = "CREATE"
+	CmdList       = "LIST"
+	CmdInfo       = "INFO"
+	CmdProduce    = "PRODUCE"
+	CmdSubscribe  = "SUBSCRIBE"
+	CmdExists     = "EXISTS"
+	CmdReady      = "READY"
+	CmdAck        = "ACK"
+	CmdDisconnect = "DISCONNECT"
 )
 
 const MaxPayload = 1024
@@ -34,7 +35,7 @@ func (r Request) Encode() (string, error) {
 		line = fmt.Sprintf("%s %s %s\n", r.Command, r.ReplyPath, r.ClientID)
 	case CmdExists:
 		line = fmt.Sprintf("%s %s %s\n", r.Command, r.ReplyPath, r.Topic)
-	case CmdReady:
+	case CmdReady, CmdDisconnect:
 		line = fmt.Sprintf("%s %s %s\n", r.Command, r.ReplyPath, r.ClientID)
 	case CmdAck:
 		line = fmt.Sprintf("%s %s %s %d\n", r.Command, r.ReplyPath, r.ClientID, r.Offset)
@@ -84,7 +85,7 @@ func DecodeRequest(line string) (Request, error) {
 			return Request{}, fmt.Errorf("%s expects 2 arguments, got %d", command, len(fields)-1)
 		}
 		return Request{Command: command, ReplyPath: fields[1], Topic: fields[2]}, nil
-	case CmdReady:
+	case CmdReady, CmdDisconnect:
 		if len(fields) != 3 {
 			return Request{}, fmt.Errorf("%s expects 2 arguments, got %d", command, len(fields)-1)
 		}

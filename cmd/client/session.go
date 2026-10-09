@@ -21,8 +21,12 @@ type session struct {
 	reply     *os.File
 	replies   *bufio.Reader
 
+	rt sync.Mutex
+
 	mu          sync.Mutex
 	channelPath string
+	clientID    string
+	leaving     bool
 }
 
 func openSession(serverPath, replyPath string) (*session, error) {
@@ -52,6 +56,8 @@ func openSession(serverPath, replyPath string) (*session, error) {
 }
 
 func (s *session) roundTrip(req protocol.Request) (protocol.Response, error) {
+	s.rt.Lock()
+	defer s.rt.Unlock()
 	req.ReplyPath = s.replyPath
 	line, err := req.Encode()
 	if err != nil {
@@ -79,10 +85,29 @@ func (s *session) close() {
 	s.mu.Unlock()
 }
 
-func (s *session) setChannel(path string) {
+func (s *session) setSubscriber(path, clientID string) {
 	s.mu.Lock()
 	s.channelPath = path
+	s.clientID = clientID
 	s.mu.Unlock()
+}
+
+func (s *session) subscriber() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.clientID
+}
+
+func (s *session) setLeaving() {
+	s.mu.Lock()
+	s.leaving = true
+	s.mu.Unlock()
+}
+
+func (s *session) isLeaving() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.leaving
 }
 
 func (s *session) closeOnSignal() {
@@ -90,6 +115,10 @@ func (s *session) closeOnSignal() {
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-signals
+		s.setLeaving()
+		if id := s.subscriber(); id != "" {
+			s.roundTrip(protocol.Request{Command: protocol.CmdDisconnect, ClientID: id})
+		}
 		s.close()
 		os.Exit(0)
 	}()
