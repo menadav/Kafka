@@ -38,7 +38,7 @@ func (b *Broker) Create(name string) bool {
 	if b.exists(name) {
 		return false
 	}
-	b.topics.Put(name, newTopic(name, b.Disconnect))
+	b.topics.Put(name, newTopic(name, b.dropSubscriber))
 	return true
 }
 
@@ -121,8 +121,8 @@ func (t *Topic) removeSubscriber(clientID, prefix string) {
 }
 
 func (b *Broker) Attach(clientID string, ch Channel) error {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	c, ok := b.clients.Get(clientID)
 	if !ok || !c.Connected {
 		return ErrClientNotFound
@@ -132,31 +132,50 @@ func (b *Broker) Attach(clientID string, ch Channel) error {
 		return ErrTopicNotFound
 	}
 
-	t.control <- control{attach: &subscriber{
+	s := &subscriber{
 		id:     clientID,
 		prefix: c.Prefix,
 		next:   c.Offset,
 		ch:     ch,
-	}}
+	}
+	c.sub = s
+	t.control <- control{attach: s}
 	return nil
 }
 
 func (b *Broker) Disconnect(clientID string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	c, ok := b.clients.Get(clientID)
-	if !ok || !c.Connected {
+	if c, ok := b.clients.Get(clientID); ok {
+		b.disconnect(c)
+	}
+}
+
+func (b *Broker) dropSubscriber(s *subscriber) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if c, ok := b.clients.Get(s.id); ok && c.sub == s {
+		b.disconnect(c)
+	}
+}
+
+func (b *Broker) disconnect(c *ClientMeta) {
+	if !c.Connected {
 		return
 	}
 	c.Connected = false
+	if c.sub != nil {
+		c.sub.stopped.Store(true)
+		c.sub = nil
+	}
 	t, ok := b.topics.Get(c.Topic)
 	if !ok {
 		return
 	}
 	t.mu.Lock()
-	t.removeSubscriber(clientID, c.Prefix)
+	t.removeSubscriber(c.ClientID, c.Prefix)
 	t.mu.Unlock()
-	t.control <- control{detach: clientID}
+	t.control <- control{detach: c.ClientID}
 }
 
 func (b *Broker) Commit(clientID string, offset uint32) error {
@@ -215,4 +234,14 @@ func (b *Broker) pendingCommits() bool {
 		}
 	}
 	return false
+}
+
+func (b *Broker) Info(clientID string) (ClientMeta, bool) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	c, ok := b.clients.Get(clientID)
+	if !ok {
+		return ClientMeta{}, false
+	}
+	return *c, true
 }

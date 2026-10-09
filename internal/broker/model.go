@@ -14,6 +14,7 @@ type ClientMeta struct {
 	Prefix    string
 	IPCPath   string
 	Connected bool
+	sub       *subscriber
 }
 
 type Message struct {
@@ -31,7 +32,7 @@ type Topic struct {
 	all         []string
 	control     chan control
 	wake        chan struct{}
-	onGone      func(clientID string)
+	onGone      func(s *subscriber)
 }
 
 type Broker struct {

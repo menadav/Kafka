@@ -3,6 +3,7 @@ package broker
 import (
 	"slices"
 	"strings"
+	"sync/atomic"
 
 	"kafka/internal/hashmap"
 	"kafka/internal/trie"
@@ -15,10 +16,11 @@ type Channel interface {
 }
 
 type subscriber struct {
-	id     string
-	prefix string
-	next   uint32
-	ch     Channel
+	id      string
+	prefix  string
+	next    uint32
+	ch      Channel
+	stopped atomic.Bool
 }
 
 type control struct {
@@ -32,7 +34,7 @@ type delivery struct {
 	ids []string
 }
 
-func newTopic(name string, onGone func(clientID string)) *Topic {
+func newTopic(name string, onGone func(s *subscriber)) *Topic {
 	t := &Topic{
 		name:        name,
 		subscribers: trie.New(),
@@ -122,9 +124,13 @@ func (t *Topic) catchUp(s *subscriber, routed uint32) bool {
 }
 
 func (t *Topic) send(s *subscriber, m Message) bool {
+	if s.stopped.Load() {
+		s.ch.Close()
+		return false
+	}
 	if err := s.ch.Send(m); err != nil {
 		s.ch.Close()
-		go t.onGone(s.id)
+		go t.onGone(s)
 		return false
 	}
 	s.next = m.Offset + 1
