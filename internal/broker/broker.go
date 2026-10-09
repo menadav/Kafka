@@ -3,6 +3,7 @@ package broker
 import (
 	"errors"
 	"slices"
+	"time"
 
 	"kafka/internal/hashmap"
 )
@@ -167,4 +168,51 @@ func (b *Broker) Commit(clientID string, offset uint32) error {
 	}
 	c.Offset = offset
 	return nil
+}
+
+func (b *Broker) Shutdown(timeout time.Duration) {
+	deadline := time.Now().Add(timeout)
+	for b.pendingCommits() && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	b.mu.RLock()
+	var topics []*Topic
+	for _, name := range b.topics.Keys() {
+		t, _ := b.topics.Get(name)
+		topics = append(topics, t)
+	}
+	b.mu.RUnlock()
+
+	var stops []chan struct{}
+	for _, t := range topics {
+		done := make(chan struct{})
+		t.control <- control{stop: done}
+		stops = append(stops, done)
+	}
+	for _, done := range stops {
+		<-done
+	}
+}
+
+func (b *Broker) pendingCommits() bool {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	for _, id := range b.clients.Keys() {
+		c, _ := b.clients.Get(id)
+		if !c.Connected {
+			continue
+		}
+		t, ok := b.topics.Get(c.Topic)
+		if !ok {
+			continue
+		}
+		t.mu.Lock()
+		pending := t.pendingFor(c.Offset, c.Prefix)
+		t.mu.Unlock()
+		if pending {
+			return true
+		}
+	}
+	return false
 }

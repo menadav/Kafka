@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"strings"
 
 	"kafka/internal/ipc"
 	"kafka/internal/protocol"
@@ -49,6 +50,10 @@ func subscribe(s *session, req protocol.Request, serverPath string) int {
 			}
 			fmt.Fprintln(os.Stderr, "server disconnected")
 			return 3
+		}
+		if strings.TrimSuffix(line, "\n") == protocol.Goodbye {
+			fmt.Fprintln(os.Stderr, "server shut down")
+			return 0
 		}
 		offset, key, body, err := protocol.DecodeDelivery(line)
 		if err != nil {

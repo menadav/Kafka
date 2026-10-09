@@ -20,6 +20,12 @@ func (c consumerChannel) Send(m broker.Message) error {
 	return err
 }
 
+func (c consumerChannel) Goodbye() error {
+	c.f.SetWriteDeadline(time.Now().Add(writeTimeout))
+	_, err := c.f.WriteString(protocol.Goodbye + "\n")
+	return err
+}
+
 func (c consumerChannel) Close() error {
 	return c.f.Close()
 }

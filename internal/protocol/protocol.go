@@ -24,6 +24,8 @@ const noOffset = "-"
 
 const MaxLine = 4096
 
+const Goodbye = "BYE"
+
 func (r Request) Encode() (string, error) {
 	var line string
 	switch r.Command {

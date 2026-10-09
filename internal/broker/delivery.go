@@ -10,6 +10,7 @@ import (
 
 type Channel interface {
 	Send(m Message) error
+	Goodbye() error
 	Close() error
 }
 
@@ -23,6 +24,7 @@ type subscriber struct {
 type control struct {
 	attach *subscriber
 	detach string
+	stop   chan struct{}
 }
 
 type delivery struct {
@@ -55,13 +57,24 @@ func (t *Topic) run() {
 	for {
 		select {
 		case c := <-t.control:
-			if c.attach != nil {
+			switch {
+			case c.stop != nil:
+				for _, id := range active.Keys() {
+					s, _ := active.Get(id)
+					s.ch.Goodbye()
+					s.ch.Close()
+				}
+				close(c.stop)
+				return
+			case c.attach != nil:
 				if t.catchUp(c.attach, routed) {
 					active.Put(c.attach.id, c.attach)
 				}
-			} else if s, ok := active.Get(c.detach); ok {
-				s.ch.Close()
-				active.Delete(c.detach)
+			default:
+				if s, ok := active.Get(c.detach); ok {
+					s.ch.Close()
+					active.Delete(c.detach)
+				}
 			}
 		case <-t.wake:
 		}
@@ -116,4 +129,16 @@ func (t *Topic) send(s *subscriber, m Message) bool {
 	}
 	s.next = m.Offset + 1
 	return true
+}
+
+func (t *Topic) pendingFor(offset uint32, prefix string) bool {
+	if int(offset) >= len(t.messages) {
+		return false
+	}
+	for _, m := range t.messages[offset:] {
+		if strings.HasPrefix(m.Key, prefix) {
+			return true
+		}
+	}
+	return false
 }

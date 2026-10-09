@@ -6,13 +6,17 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"kafka/internal/broker"
 	"kafka/internal/ipc"
 	"kafka/internal/protocol"
 )
+
+const shutdownTimeout = 5 * time.Second
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -34,8 +38,21 @@ func main() {
 	b := broker.New()
 	go serve(path, reader, b)
 	<-ctx.Done()
+	stop()
 	fmt.Fprintln(os.Stderr, "shutting down")
 	os.Remove(path)
+	b.Shutdown(shutdownTimeout)
+	removeFIFOs(path)
+}
+
+func removeFIFOs(path string) {
+	matches, _ := filepath.Glob(path + ".*")
+	for _, m := range matches {
+		info, err := os.Lstat(m)
+		if err == nil && info.Mode()&os.ModeNamedPipe != 0 {
+			os.Remove(m)
+		}
+	}
 }
 
 func serve(path string, reader *bufio.Reader, b *broker.Broker) {
