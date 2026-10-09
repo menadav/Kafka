@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"strings"
 
@@ -22,7 +24,18 @@ func handle(b *broker.Broker, serverPath string, req protocol.Request) protocol.
 	case protocol.CmdList:
 		return protocol.Response{Code: 0, Body: strings.Join(b.List(), ",")}
 	case protocol.CmdInfo:
-		return protocol.Response{Code: 2, Body: "client not found"}
+		if !protocol.ValidName(req.ClientID) {
+			return protocol.Response{Code: 1, Body: "invalid client name"}
+		}
+		c, ok := b.Info(req.ClientID)
+		if !ok {
+			return protocol.Response{Code: 2, Body: "client not found"}
+		}
+		body, err := infoJSON(c)
+		if err != nil {
+			return protocol.Response{Code: 1, Body: err.Error()}
+		}
+		return protocol.Response{Code: 0, Body: body}
 	case protocol.CmdExists:
 		if !protocol.ValidName(req.Topic) {
 			return protocol.Response{Code: 1, Body: "invalid topic name"}
@@ -92,4 +105,26 @@ func handle(b *broker.Broker, serverPath string, req protocol.Request) protocol.
 	default:
 		return protocol.Response{Code: 1, Body: "unknown command"}
 	}
+}
+
+type clientInfo struct {
+	Client string `json:"client"`
+	Topic  string `json:"topic"`
+	Offset uint32 `json:"offset"`
+	Prefix string `json:"prefix"`
+	IPC    string `json:"ipc"`
+}
+
+func infoJSON(c broker.ClientMeta) (string, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	err := enc.Encode(clientInfo{
+		Client: c.ClientID,
+		Topic:  c.Topic,
+		Offset: c.Offset,
+		Prefix: c.Prefix,
+		IPC:    c.IPCPath,
+	})
+	return strings.TrimSuffix(buf.String(), "\n"), err
 }
