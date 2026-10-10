@@ -2,6 +2,8 @@ package main
 
 import (
 	"bufio"
+	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -10,7 +12,7 @@ import (
 	"kafka/internal/protocol"
 )
 
-func produce(s *session, topic string, in io.Reader) int {
+func produce(s *session, topic string, in io.Reader, raw bool) int {
 	resp, err := s.roundTrip(protocol.Request{Command: protocol.CmdExists, Topic: topic})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -21,15 +23,17 @@ func produce(s *session, topic string, in io.Reader) int {
 		return resp.Code
 	}
 
-	scanner := bufio.NewScanner(in)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line == "" {
-			continue
+	var messages messageReader = &textReader{scanner: bufio.NewScanner(in)}
+	if raw {
+		messages = &rawReader{r: bufio.NewReader(in)}
+	}
+	for {
+		key, body, err := messages.next()
+		if err == io.EOF {
+			return 0
 		}
-		key, body, ok := strings.Cut(line, ":")
-		if !ok {
-			fmt.Fprintf(os.Stderr, "invalid message %q: expected key:body\n", line)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
 			return 1
 		}
 		if len(key)+len(body) > protocol.MaxPayload {
@@ -51,9 +55,73 @@ func produce(s *session, topic string, in io.Reader) int {
 			return resp.Code
 		}
 	}
-	if err := scanner.Err(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
+}
+
+type messageReader interface {
+	next() (key, body string, err error)
+}
+
+type textReader struct {
+	scanner *bufio.Scanner
+}
+
+func (t *textReader) next() (string, string, error) {
+	for t.scanner.Scan() {
+		line := t.scanner.Text()
+		if line == "" {
+			continue
+		}
+		key, body, ok := strings.Cut(line, ":")
+		if !ok {
+			return "", "", fmt.Errorf("invalid message %q: expected key:body", line)
+		}
+		return key, body, nil
 	}
-	return 0
+	if err := t.scanner.Err(); err != nil {
+		return "", "", err
+	}
+	return "", "", io.EOF
+}
+
+var errPartialRecord = errors.New("partial record at end of input")
+
+type rawReader struct {
+	r *bufio.Reader
+}
+
+func (r *rawReader) next() (string, string, error) {
+	key, err := r.field()
+	if err == io.EOF {
+		return "", "", io.EOF
+	}
+	if err != nil {
+		return "", "", err
+	}
+	value, err := r.field()
+	if err == io.EOF {
+		return "", "", errPartialRecord
+	}
+	if err != nil {
+		return "", "", err
+	}
+	return key, value, nil
+}
+
+func (r *rawReader) field() (string, error) {
+	var size [4]byte
+	if _, err := io.ReadFull(r.r, size[:]); err != nil {
+		if err == io.EOF {
+			return "", io.EOF
+		}
+		return "", errPartialRecord
+	}
+	n := binary.LittleEndian.Uint32(size[:])
+	if n > protocol.MaxPayload {
+		return "", fmt.Errorf("field too large: %d bytes, max %d", n, protocol.MaxPayload)
+	}
+	buf := make([]byte, n)
+	if _, err := io.ReadFull(r.r, buf); err != nil {
+		return "", errPartialRecord
+	}
+	return string(buf), nil
 }

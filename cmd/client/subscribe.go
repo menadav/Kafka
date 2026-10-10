@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/binary"
 	"fmt"
 	"os"
 	"strings"
@@ -10,7 +11,7 @@ import (
 	"kafka/internal/protocol"
 )
 
-func subscribe(s *session, req protocol.Request, serverPath string) int {
+func subscribe(s *session, req protocol.Request, serverPath string, raw bool) int {
 	resp, err := s.roundTrip(req)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -60,7 +61,11 @@ func subscribe(s *session, req protocol.Request, serverPath string) int {
 			fmt.Fprintln(os.Stderr, err)
 			continue
 		}
-		fmt.Printf("%s:%s\n", key, body)
+		if raw {
+			os.Stdout.Write(rawRecord(offset, key, body))
+		} else {
+			fmt.Printf("%s:%s\n", key, body)
+		}
 		ack, err := s.roundTrip(protocol.Request{
 			Command:  protocol.CmdAck,
 			ClientID: req.ClientID,
@@ -78,4 +83,12 @@ func subscribe(s *session, req protocol.Request, serverPath string) int {
 			return ack.Code
 		}
 	}
+}
+
+func rawRecord(offset uint32, key, value string) []byte {
+	b := binary.LittleEndian.AppendUint32(nil, offset)
+	b = binary.LittleEndian.AppendUint32(b, uint32(len(key)))
+	b = append(b, key...)
+	b = binary.LittleEndian.AppendUint32(b, uint32(len(value)))
+	return append(b, value...)
 }

@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"encoding/base64"
 	"fmt"
 	"strconv"
 	"strings"
@@ -42,7 +43,7 @@ func (r Request) Encode() (string, error) {
 	case CmdAck:
 		line = fmt.Sprintf("%s %s %s %d\n", r.Command, r.ReplyPath, r.ClientID, r.Offset)
 	case CmdProduce:
-		line = fmt.Sprintf("%s %s %s %s:%s\n", r.Command, r.ReplyPath, r.Topic, r.Key, r.Value)
+		line = fmt.Sprintf("%s %s %s %s %s\n", r.Command, r.ReplyPath, r.Topic, encodeField(r.Key), encodeField(r.Value))
 	case CmdSubscribe:
 
 		offset := noOffset
@@ -102,15 +103,18 @@ func DecodeRequest(line string) (Request, error) {
 		}
 		return Request{Command: command, ReplyPath: fields[1], ClientID: fields[2], Offset: uint32(n)}, nil
 	case CmdProduce:
-		parts := strings.SplitN(strings.TrimSuffix(line, "\n"), " ", 4)
-		if len(parts) != 4 {
-			return Request{}, fmt.Errorf("%s expects 3 arguments, got %d", command, len(parts)-1)
+		if len(fields) != 5 {
+			return Request{}, fmt.Errorf("%s expects 4 arguments, got %d", command, len(fields)-1)
 		}
-		key, value, ok := strings.Cut(parts[3], ":")
-		if !ok {
-			return Request{}, fmt.Errorf("%s message must be key:body", command)
+		key, err := decodeField(fields[3])
+		if err != nil {
+			return Request{}, fmt.Errorf("%s key: %w", command, err)
 		}
-		return Request{Command: command, ReplyPath: parts[1], Topic: parts[2], Key: key, Value: value}, nil
+		value, err := decodeField(fields[4])
+		if err != nil {
+			return Request{}, fmt.Errorf("%s value: %w", command, err)
+		}
+		return Request{Command: command, ReplyPath: fields[1], Topic: fields[2], Key: key, Value: value}, nil
 	case CmdSubscribe:
 		parts := strings.SplitN(strings.TrimSuffix(line, "\n"), " ", 6)
 		if len(parts) != 6 {
@@ -156,21 +160,40 @@ func DecodeResponse(line string) (Response, error) {
 }
 
 func EncodeDelivery(offset uint32, key string, value []byte) string {
-	return fmt.Sprintf("%d %s:%s\n", offset, key, value)
+	return fmt.Sprintf("%d %s %s\n", offset, encodeField(key), encodeField(string(value)))
 }
 
 func DecodeDelivery(line string) (offset uint32, key, body string, err error) {
-	head, message, ok := strings.Cut(strings.TrimSuffix(line, "\n"), " ")
-	if !ok {
+	fields := strings.Fields(line)
+	if len(fields) != 3 {
 		return 0, "", "", fmt.Errorf("malformed delivery: %q", line)
 	}
-	n, err := strconv.ParseUint(head, 10, 32)
+	n, err := strconv.ParseUint(fields[0], 10, 32)
 	if err != nil {
-		return 0, "", "", fmt.Errorf("delivery offset is not a number: %q", head)
+		return 0, "", "", fmt.Errorf("delivery offset is not a number: %q", fields[0])
 	}
-	key, body, ok = strings.Cut(message, ":")
-	if !ok {
-		return 0, "", "", fmt.Errorf("delivery must be key:body: %q", message)
+	if key, err = decodeField(fields[1]); err != nil {
+		return 0, "", "", fmt.Errorf("delivery key: %w", err)
+	}
+	if body, err = decodeField(fields[2]); err != nil {
+		return 0, "", "", fmt.Errorf("delivery value: %w", err)
 	}
 	return uint32(n), key, body, nil
+}
+
+const emptyField = "-"
+
+func encodeField(s string) string {
+	if s == "" {
+		return emptyField
+	}
+	return base64.StdEncoding.EncodeToString([]byte(s))
+}
+
+func decodeField(field string) (string, error) {
+	if field == emptyField {
+		return "", nil
+	}
+	b, err := base64.StdEncoding.DecodeString(field)
+	return string(b), err
 }

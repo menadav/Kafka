@@ -33,9 +33,9 @@ func main() {
 	var code int
 	switch req.Command {
 	case protocol.CmdProduce:
-		code = produce(s, req.Topic, os.Stdin)
+		code = produce(s, req.Topic, os.Stdin, rawMode(os.Args))
 	case protocol.CmdSubscribe:
-		code = subscribe(s, req, serverPath)
+		code = subscribe(s, req, serverPath, rawMode(os.Args))
 	default:
 		code = send(s, req)
 	}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -52,10 +53,9 @@ func buildRequest(args []string) (protocol.Request, error) {
 			return protocol.Request{}, fmt.Errorf("invalid topic name: %q", args[3])
 		}
 		for _, opt := range args[4:] {
-			if opt == "--raw" {
-				return protocol.Request{}, fmt.Errorf("--raw is not supported yet")
+			if opt != "--raw" {
+				return protocol.Request{}, fmt.Errorf("unknown option: %q", opt)
 			}
-			return protocol.Request{}, fmt.Errorf("unknown option: %q", opt)
 		}
 		return protocol.Request{
 			Command: protocol.CmdProduce,
@@ -98,7 +98,6 @@ func buildRequest(args []string) (protocol.Request, error) {
 				req.HasOffset = true
 				i++
 			case "--raw":
-				return protocol.Request{}, fmt.Errorf("--raw is not supported yet")
 			default:
 				return protocol.Request{}, fmt.Errorf("unknown option: %q", args[i])
 			}
@@ -114,4 +113,8 @@ func optionValue(args []string, i int) (string, error) {
 		return "", fmt.Errorf("%s needs a value", args[i])
 	}
 	return args[i+1], nil
+}
+
+func rawMode(args []string) bool {
+	return len(args) > 4 && slices.Contains(args[4:], "--raw")
 }
