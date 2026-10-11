@@ -28,13 +28,17 @@ make test       # run the unit tests
 make clean      # remove the binaries   ·   make re: rebuild
 ```
 
+The server prints its IPC identifier, which depends on its PID; pass that path to the client. Messages are read from stdin, one `key:body` per line. The server logs every request to stderr.
+
 ```bash
-./server                                              # /tmp/kafka.server.1337
-./client /tmp/kafka.server.1337 create user_events    # topic created
-./client /tmp/kafka.server.1337 subscribe user_events client0 --prefix user.create &
-./client /tmp/kafka.server.1337 produce user_events < messages.txt
-./client /tmp/kafka.server.1337 info client0
-# {"client":"client0","topic":"user_events","offset":4,"prefix":"user.create","ipc":"/tmp/kafka.server.1337.client0"}
+./server                                    # prints e.g. /tmp/kafka.server.1337
+IPC=/tmp/kafka.server.1337                  # use the path your server printed
+
+./client $IPC create user_events            # topic created
+./client $IPC subscribe user_events client0 --prefix user.create &
+echo 'user.create:{"user":"reach"}' | ./client $IPC produce user_events
+./client $IPC info client0
+# {"client":"client0","topic":"user_events","offset":1,"prefix":"user.create","ipc":"/tmp/kafka.server.1337.client0"}
 ```
 
 | Command | Description |
