@@ -151,10 +151,17 @@ func (b *Broker) Disconnect(clientID string) {
 	}
 }
 
+func (b *Broker) SetLogger(logf func(format string, args ...any)) {
+	b.logf = logf
+}
+
 func (b *Broker) dropSubscriber(s *subscriber) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if c, ok := b.clients.Get(s.id); ok && c.sub == s {
+		if b.logf != nil {
+			b.logf("dropped client=%s: it stopped reading or is gone", s.id)
+		}
 		b.disconnect(c)
 	}
 }

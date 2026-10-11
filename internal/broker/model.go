@@ -39,4 +39,5 @@ type Broker struct {
 	mu      sync.RWMutex
 	topics  *hashmap.Index[*Topic]
 	clients *hashmap.Index[*ClientMeta]
+	logf    func(format string, args ...any)
 }

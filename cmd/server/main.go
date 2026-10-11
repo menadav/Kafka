@@ -34,25 +34,31 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Println(path)
+	logger.Printf("listening on %s", path)
 	reader := bufio.NewReader(endpoint)
 	b := broker.New()
+	b.SetLogger(logger.Printf)
 	go serve(path, reader, b)
 	<-ctx.Done()
 	stop()
-	fmt.Fprintln(os.Stderr, "shutting down")
+	logger.Printf("shutting down: waiting up to %s for consumers to commit", shutdownTimeout)
 	os.Remove(path)
+	start := time.Now()
 	b.Shutdown(shutdownTimeout)
-	removeFIFOs(path)
+	logger.Printf("consumers told goodbye after %s", time.Since(start).Round(time.Millisecond))
+	logger.Printf("removed %d leftover FIFOs, bye", removeFIFOs(path))
 }
 
-func removeFIFOs(path string) {
+func removeFIFOs(path string) int {
+	removed := 0
 	matches, _ := filepath.Glob(path + ".*")
 	for _, m := range matches {
 		info, err := os.Lstat(m)
-		if err == nil && info.Mode()&os.ModeNamedPipe != 0 {
-			os.Remove(m)
+		if err == nil && info.Mode()&os.ModeNamedPipe != 0 && os.Remove(m) == nil {
+			removed++
 		}
 	}
+	return removed
 }
 
 func serve(path string, reader *bufio.Reader, b *broker.Broker) {
@@ -63,17 +69,18 @@ func serve(path string, reader *bufio.Reader, b *broker.Broker) {
 		}
 		req, err := protocol.DecodeRequest(line)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			logger.Printf("bad request: %v", err)
 			continue
 		}
 		if !ownReplyPath(path, req.ReplyPath) {
-			fmt.Fprintf(os.Stderr, "refusing reply path %q\n", req.ReplyPath)
+			logger.Printf("refusing reply path %q", req.ReplyPath)
 			continue
 		}
 		resp := handle(b, path, req)
+		logRequest(req, resp)
 		reply, err := ipc.OpenWrite(req.ReplyPath)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			logger.Printf("cannot answer %s: %v", req.ReplyPath, err)
 			continue
 		}
 		reply.WriteString(resp.Encode())
