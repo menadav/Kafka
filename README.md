@@ -1,4 +1,7 @@
 # 🌳 treenity
+> A Kafka-style message queue written in Go, where producers and consumers talk to a server through named pipes (FIFOs).
+
+![treenity flow](assets/treenity_flow.png)
 
 ## Description
 
